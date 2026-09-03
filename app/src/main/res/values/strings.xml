@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Ω7 Messenger</string>
+    <string name="app_tagline">Prywatny komunikator dla maksymalnie 7 osób</string>
+    <string name="access_code">Kod dostępu</string>
+    <string name="unlock">Odblokuj</string>
+    <string name="create_code">Utwórz kod</string>
+    <string name="biometric_unlock">Odblokuj biometrią</string>
+    <string name="send">Wyślij</string>
+</resources>
