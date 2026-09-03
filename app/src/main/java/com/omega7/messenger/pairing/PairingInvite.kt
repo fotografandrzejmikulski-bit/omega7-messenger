@@ -101,8 +101,9 @@ data class PairingInvite(
             if (value == null) return
             val uri = URI(value)
             require(uri.scheme.equals("https", ignoreCase = true)) { "Relay musi używać HTTPS." }
-            require(!uri.userInfo.isNullOrBlank()) { "Adres relay nie może zawierać danych uwierzytelniających." }
+            require(uri.userInfo == null) { "Adres relay nie może zawierać danych uwierzytelniających." }
             require(uri.fragment == null) { "Adres relay nie może zawierać fragmentu." }
+            require(!uri.host.isNullOrBlank()) { "Adres relay musi zawierać poprawny host." }
         }
     }
 }
