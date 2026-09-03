@@ -13,20 +13,20 @@ interface E2eeEngine {
 class SignalE2eeEngineAdapter(context: Context) : E2eeEngine {
     private val engine = SignalE2eeEngine.open(context.applicationContext)
 
-    override fun encrypt(groupId: String, plaintext: ByteArray): ByteArray =
-        engine.encrypt(groupId, plaintext)
-
-    override fun decrypt(groupId: String, ciphertext: ByteArray): ByteArray =
-        engine.decrypt(groupId, ciphertext)
+    override fun encrypt(groupId: String, plaintext: ByteArray): ByteArray = engine.encrypt(groupId, plaintext)
+    override fun decrypt(groupId: String, ciphertext: ByteArray): ByteArray = engine.decrypt(groupId, ciphertext)
 
     fun implementation(): SignalE2eeEngine = engine
+    fun localBundle(): SignalE2eeEngine.DeviceBundle = engine.localBundle()
+    fun generatePreKeys(count: Int = 24) = engine.generatePreKeys(count)
+    fun registerVerifiedDevice(groupId: String, bundle: SignalE2eeEngine.DeviceBundle) = engine.registerVerifiedDevice(groupId, bundle)
+    fun revokeDevice(groupId: String, deviceId: Int) = engine.revokeDevice(groupId, deviceId)
+    fun deviceId(): Int = engine.deviceId()
+    fun identityFingerprint(): String = engine.identityFingerprint()
 }
 
-/** Explicit fail-closed implementation used until a production E2EE adapter is injected. */
+/** Explicit fail-closed implementation used when no production E2EE adapter is available. */
 class E2eeNotConfigured : E2eeEngine {
-    override fun encrypt(groupId: String, plaintext: ByteArray): ByteArray =
-        error("Warstwa E2EE nie została skonfigurowana.")
-
-    override fun decrypt(groupId: String, ciphertext: ByteArray): ByteArray =
-        error("Warstwa E2EE nie została skonfigurowana.")
+    override fun encrypt(groupId: String, plaintext: ByteArray): ByteArray = error("Warstwa E2EE nie została skonfigurowana.")
+    override fun decrypt(groupId: String, ciphertext: ByteArray): ByteArray = error("Warstwa E2EE nie została skonfigurowana.")
 }
