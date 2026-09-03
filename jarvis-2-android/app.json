@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name":"JARVIS 2.0",
+    "slug":"jarvis-2-android",
+    "version":"3.0.0",
+    "orientation":"portrait",
+    "scheme":"jarvis",
+    "userInterfaceStyle":"dark",
+    "newArchEnabled":true,
+    "android":{"package":"com.jarvis.commandos","versionCode":1,"adaptiveIcon":{"backgroundColor":"#050812"}},
+    "plugins":["expo-router","expo-secure-store"],
+    "experiments":{"typedRoutes":true}
+  }
+}
