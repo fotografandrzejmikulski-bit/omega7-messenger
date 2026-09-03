@@ -8,12 +8,16 @@ android {
         applicationId = "com.omega7.messenger"
         minSdk = 28
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.10.0-e2ee"
+        versionCode = 12
+        versionName = "0.10.1-e2ee"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk {
-            abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-        }
+        ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
+    }
+
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildTypes {
@@ -25,13 +29,12 @@ android {
     }
 
     packaging {
-        resources {
-            excludes += setOf("libsignal_jni*.dylib", "signal_jni*.dll", "libsignal_jni_testing.so")
-        }
+        resources { excludes += setOf("libsignal_jni*.dylib", "signal_jni*.dll", "libsignal_jni_testing.so") }
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.core:core:1.17.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.biometric:biometric:1.4.0-alpha02")
