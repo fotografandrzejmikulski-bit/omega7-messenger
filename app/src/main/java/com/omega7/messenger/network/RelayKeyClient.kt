@@ -11,7 +11,7 @@ import kotlin.coroutines.suspendCoroutine
 
 /**
  * Client for public Signal bundle discovery and authenticated one-time-prekey replenishment.
- * It never sends plaintext or private key material to the relay.
+ * Bundle retrieval is authenticated to prevent unauthenticated prekey exhaustion.
  */
 class RelayKeyClient(
     private val baseUrl: String,
@@ -27,10 +27,12 @@ class RelayKeyClient(
     }
 
     suspend fun fetchBundle(groupId: String, remoteDeviceId: Int): Result<SignalE2eeEngine.DeviceBundle> =
-        async { 
+        async {
+            require(groupId.isNotBlank() && groupId.length <= 128)
+            require(remoteDeviceId in 1..127 && remoteDeviceId != deviceId)
             val response = request(
                 "GET",
-                "/v1/keys/${encode(groupId)}/$remoteDeviceId",
+                "/v1/keys/${encode(groupId)}/$remoteDeviceId?requesterDeviceId=$deviceId",
                 null,
                 authenticated = true,
             )
