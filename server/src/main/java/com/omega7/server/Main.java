@@ -211,11 +211,18 @@ public final class Main {
 
     private static void keys(HttpExchange x) throws IOException {
         if (!method(x, "GET")) return;
+        String token = auth(x); if (token == null) { json(x, 401, error("Brak uwierzytelnienia.")); return; }
         String[] parts = x.getRequestURI().getPath().split("/");
         if (parts.length < 5) { json(x, 400, error("Brak identyfikatora.")); return; }
         String group = parts[3]; int device;
         try { device = Integer.parseInt(parts[4]); } catch (Exception e) { json(x, 400, error("Nieprawidłowe urządzenie.")); return; }
+        String requesterRaw = q(x, "requesterDeviceId");
+        if (requesterRaw == null) { json(x, 400, error("Brak requesterDeviceId.")); return; }
+        int requester;
+        try { requester = Integer.parseInt(requesterRaw); } catch (Exception e) { json(x, 400, error("Nieprawidłowe requesterDeviceId.")); return; }
+        if (requester < 1 || requester > 127 || requester == device) { json(x, 400, error("Nieprawidłowe urządzenie żądające.")); return; }
         try (Connection c = db()) {
+            if (!authorized(c, group, requester, token)) { json(x, 403, error("Brak uprawnień.")); return; }
             c.setAutoCommit(false);
             try (PreparedStatement q = c.prepareStatement("SELECT registration_id,identity_key,signed_prekey_id,signed_prekey,signed_prekey_signature,kyber_prekey_id,kyber_prekey,kyber_prekey_signature FROM devices WHERE group_id=? AND device_id=? AND active=true")) {
                 q.setString(1, group); q.setInt(2, device);
