@@ -15,17 +15,14 @@ Wersja 0.8.1 jest finalnym pakietem źródłowym do dalszego build/release.
 - Dwustronne parowanie QR z podpisanymi tożsamościami i akceptacją właściciela.
 - Limit maksymalnie 7 urządzeń.
 - Rejestr zaufanych urządzeń szyfrowany lokalnie.
-- Kolejka zaproszeń parowania szyfrowana lokalnie.
+- Kolejka zaproszeń parowania również szyfrowana lokalnie.
 - CI GitHub Actions przygotowane do testów, lint i budowania APK.
 
 ## Brak podstaw do deklaracji produkcyjnego E2EE
-
 Nie deklarujemy jeszcze produkcyjnego E2EE, ponieważ wymaga ono rzeczywiście zintegrowanego i zweryfikowanego protokołu E2EE, synchronizacji kluczy/sesji oraz testów na urządzeniach. Warstwa transportowa pozostaje zamknięta do czasu spełnienia tych warunków.
 
 ## GitHub
-
-Repozytorium `fotografandrzejmikulski-bit/omega7-messenger` jest teraz osiągalne przez aktywne połączenie GitHub i ma uprawnienia zapisu. Repozytorium jest prywatne. Import pełnego drzewa źródeł jest kolejnym krokiem technicznym; nie oznaczamy go jako zakończonego, dopóki wszystkie pliki nie zostaną faktycznie zapisane i zweryfikowane.
+Repozytorium projektu jest prywatne i dostępne pod właścicielem `fotografandrzejmikulski-bit/omega7-messenger`. Import źródeł do repozytorium jest wykonywany etapami. Nie należy traktować samego repozytorium jako dowodu przejścia testów CI ani audytu bezpieczeństwa.
 
 ## Weryfikacja środowiskowa
-
 W bieżącym środowisku nie ma Android SDK, ADB ani pełnego Gradle Wrappera, dlatego nie należy twierdzić, że APK zostało tutaj skompilowane lub uruchomione na fizycznym telefonie. CI jest przygotowane do wykonania tych kroków na runnerze GitHub.
