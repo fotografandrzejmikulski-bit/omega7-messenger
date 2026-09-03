@@ -1,0 +1,3 @@
+import React from 'react';import {Text,View} from 'react-native';import {Screen,Header,Card,C,s} from '@/components/ui';
+const tasks=[['HIGH','Przygotować briefing tygodnia','IN PROGRESS'],['HIGH','Odpowiedzieć na ważne wiadomości','WAITING'],['MEDIUM','Zweryfikować research','PLANNED'],['LOW','Uporządkować kontakty','PLANNED']];
+export default function Tasks(){return <Screen><Header title="Tasks" sub="EXECUTION QUEUE"/>{tasks.map((t,i)=><Card key={i}><View style={{flexDirection:'row',alignItems:'center',gap:10}}><View style={{flex:1}}><Text style={{color:C.text,fontSize:14,fontWeight:'700'}}>{t[1]}</Text><Text style={s.note}>{t[2]}</Text></View><Text style={{color:t[0]==='HIGH'?C.amber:C.muted,fontSize:9,fontWeight:'900'}}>{t[0]}</Text></View></Card>)}</Screen>}
