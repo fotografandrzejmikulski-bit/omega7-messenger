@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: omega7
+      POSTGRES_USER: omega7
+      POSTGRES_PASSWORD: ${OMEGA7_DB_PASSWORD:?set OMEGA7_DB_PASSWORD}
+    volumes:
+      - omega7_pg:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omega7 -d omega7"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  relay:
+    build: .
+    environment:
+      OMEGA7_DB_URL: jdbc:postgresql://postgres:5432/omega7?sslmode=require
+      OMEGA7_DB_USER: omega7
+      OMEGA7_DB_PASSWORD: ${OMEGA7_DB_PASSWORD:?set OMEGA7_DB_PASSWORD}
+      OMEGA7_AUTH_SECRET: ${OMEGA7_AUTH_SECRET:?set OMEGA7_AUTH_SECRET}
+      OMEGA7_BOOTSTRAP_SECRET: ${OMEGA7_BOOTSTRAP_SECRET:?set OMEGA7_BOOTSTRAP_SECRET}
+      PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  omega7_pg:
