@@ -7,7 +7,6 @@ group = "com.omega7"
 version = "1.0.0"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
-repositories { mavenCentral() }
 
 dependencies {
     implementation("org.postgresql:postgresql:42.7.13")
