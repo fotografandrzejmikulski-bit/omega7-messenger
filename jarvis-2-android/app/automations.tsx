@@ -1,0 +1,3 @@
+import React from 'react';import {Text,View} from 'react-native';import {Screen,Header,Card,C,s} from '@/components/ui';
+const a=[['08:00','Morning Briefing','Executive'],['Co 15 min','Inbox Triage','Email'],['09:30','Client Follow-up','Executive'],['11:00','Market Watch','Research'],['18:00','Finance Report','Finance']];
+export default function Automations(){return <Screen><Header title="Automations" sub="N8N ORCHESTRATION"/>{a.map((x,i)=><Card key={i}><View style={{flexDirection:'row',justifyContent:'space-between'}}><View><Text style={{color:C.text,fontWeight:'800'}}>{x[1]}</Text><Text style={{color:C.muted,fontSize:10}}>{x[2]}</Text></View><Text style={{color:C.cyan,fontWeight:'800'}}>{x[0]}</Text></View></Card>)}</Screen>}
