@@ -7,7 +7,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.InvalidKeyException
-import org.signal.libsignal.protocol.NoSessionException
 import org.signal.libsignal.protocol.SessionBuilder
 import org.signal.libsignal.protocol.SessionCipher
 import org.signal.libsignal.protocol.SignalProtocolAddress
@@ -59,6 +58,9 @@ class SignalE2eeEngine private constructor(
         return DeviceBundle(localDeviceId,store.localRegistrationId,store.identityKeyPair.publicKey.serialize(),pre,store.loadPreKey(pre).keyPair.publicKey.serialize(),signed.id,signed.keyPair.publicKey.serialize(),signed.signature,kyber.id,kyber.keyPair.publicKey.serialize(),kyber.signature)
     }
 
+    /** Public one-time prekeys ready for authenticated relay publication. */
+    fun localPreKeys(): List<Pair<Int, ByteArray>> = store.availablePreKeyIds().map { id -> id to store.loadPreKey(id).keyPair.publicKey.serialize() }
+
     @Synchronized fun generatePreKeys(preKeyCount:Int=24){
         require(preKeyCount in 8..64){"Nieprawidłowa liczba prekeys."}; val idk=store.identityKeyPair; val r=SecureRandom()
         val sid=r.nextInt(0x7FFFFF)+1; val sp=ECKeyPair.generate(); val ss=idk.privateKey.calculateSignature(sp.publicKey.serialize())
@@ -99,7 +101,14 @@ class SignalE2eeEngine private constructor(
         require(envelope.size<=MAX_ENVELOPE){"Koperta jest zbyt duża."};val p=decodeEnvelope(envelope);require(p.first==senderDeviceId){"Adres nadawcy nie zgadza się z kopertą."};val remote=SignalProtocolAddress(groupId,senderDeviceId);val local=SignalProtocolAddress(groupId,localDeviceId);return try{val c=SessionCipher(store,local,remote);when(p.second){CiphertextMessage.PREKEY_TYPE->c.decrypt(PreKeySignalMessage(p.third));CiphertextMessage.WHISPER_TYPE->c.decrypt(SignalMessage(p.third));else->throw SecurityException("Niedozwolony typ koperty E2EE.")}}finally{local.close();remote.close()}
     }
 
-    fun revokeDevice(groupId:String,remoteDeviceId:Int){saveVerifiedBundles(loadVerifiedBundles().filterNot{it.deviceId==remoteDeviceId});store.deleteAllSessions(groupId)}
+    /** Revoke only the target device's session and local bundle; do not destroy unrelated sessions. */
+    @Synchronized fun revokeDevice(groupId:String,remoteDeviceId:Int){
+        require(remoteDeviceId in 1..127 && remoteDeviceId!=localDeviceId)
+        saveVerifiedBundles(loadVerifiedBundles().filterNot{it.deviceId==remoteDeviceId})
+        val address=SignalProtocolAddress(groupId,remoteDeviceId)
+        try { store.deleteSession(address) } finally { address.close() }
+    }
+
     fun identityFingerprint():String=store.identityKeyPair.publicKey.getFingerprint(); fun deviceId():Int=localDeviceId
 
     private fun loadVerifiedBundles():List<DeviceBundle>{val f=EncryptedLocalStore(context,fileName=VERIFIED_FILE);val b=f.load()?:return emptyList();return try{val a=JSONArray(String(b,Charsets.UTF_8));(0 until a.length()).map{DeviceBundle.fromJson(a.getString(it))}}finally{b.fill(0)}}
