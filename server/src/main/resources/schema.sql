@@ -23,6 +23,20 @@ CREATE TABLE IF NOT EXISTS devices (
   UNIQUE(group_id, auth_token_hash)
 );
 
+CREATE TABLE IF NOT EXISTS one_time_prekeys (
+  group_id TEXT NOT NULL,
+  device_id INTEGER NOT NULL,
+  prekey_id INTEGER NOT NULL CHECK (prekey_id > 0),
+  prekey BYTEA NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY(group_id, device_id, prekey_id),
+  FOREIGN KEY(group_id, device_id) REFERENCES devices(group_id, device_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS one_time_prekeys_available_idx
+  ON one_time_prekeys(group_id, device_id, consumed_at, prekey_id);
+
 CREATE TABLE IF NOT EXISTS invites (
   invite_id UUID PRIMARY KEY,
   group_id TEXT NOT NULL REFERENCES omega_groups(group_id) ON DELETE CASCADE,
