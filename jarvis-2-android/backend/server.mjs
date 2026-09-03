@@ -3,8 +3,8 @@ import crypto from 'node:crypto';
 const PORT=Number(process.env.PORT||8787), TOKEN=process.env.JARVIS_API_TOKEN||'', CORS=process.env.CORS_ORIGIN||'*';
 const STATE_FILE=process.env.JARVIS_STATE_FILE||'./jarvis-state.json';
 const agents=[['01','Triage / Router'],['02','Executive'],['03','Research'],['04','Email'],['05','Calendar'],['06','Finance'],['07','Contacts'],['08','Data / Logic'],['09','Memory'],['10','Voice'],['11','Policy']];
-let state={tasks:[],memory:[],approvals:[],audit:[],push_tokens:[]};
-try{state=JSON.parse(await import('node:fs/promises').then(x=>x.readFile(STATE_FILE,'utf8')))}catch{}
+let state={tasks:[],memory:[],approvals:[],automations:[],audit:[],push_tokens:[]};
+try{state={tasks:[],memory:[],approvals:[],automations:[],audit:[],push_tokens:[],...JSON.parse(await import('node:fs/promises').then(x=>x.readFile(STATE_FILE,'utf8')))}}catch{}
 const fs=await import('node:fs/promises');
 const id=()=>crypto.randomUUID();
 async function save(){await fs.writeFile(STATE_FILE,JSON.stringify(state,null,2))}
@@ -17,7 +17,7 @@ async function openai(text){const key=process.env.OPENAI_API_KEY;if(!key)return{
 async function transcribe(req,res){const key=process.env.OPENAI_API_KEY;if(!key)return json(res,503,{error:'transcription unavailable: OPENAI_API_KEY not configured'});const audio=await read(req,25_000_000);const form=new FormData();form.append('file',new Blob([audio],{type:req.headers['content-type']||'audio/m4a'}),'jarvis.m4a');form.append('model',process.env.OPENAI_TRANSCRIBE_MODEL||'gpt-4o-transcribe');form.append('language','pl');const r=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{authorization:`Bearer ${key}`},body:form});if(!r.ok)throw Error(`Transcription ${r.status}`);return json(res,200,await r.json())}
 async function sendPush(token,title,bodyText){const r=await fetch('https://exp.host/--/api/v2/push/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({to:token,title,body:bodyText,sound:'default'})});return r.ok}
 async function route(req,res){const u=new URL(req.url,`http://${req.headers.host}`);if(req.method==='OPTIONS')return json(res,204,{});if(!auth(req))return json(res,401,{error:'unauthorized'});try{
-if(req.method==='GET'&&u.pathname==='/api/health')return json(res,200,{ok:true,version:'3.1.1',service:'jarvis-backend',persistence:process.env.DATABASE_URL?'postgres-configured':'json-fallback'});
+if(req.method==='GET'&&u.pathname==='/api/health')return json(res,200,{ok:true,version:'3.2.0',service:'jarvis-backend',persistence:process.env.DATABASE_URL?'postgres-configured':'json-fallback'});
 if(req.method==='GET'&&u.pathname==='/api/agents')return json(res,200,{agents:agents.map(([id,name])=>({id,name,status:'online'}))});
 if(req.method==='GET'&&u.pathname==='/api/tasks')return json(res,200,{tasks:state.tasks});
 if(req.method==='POST'&&u.pathname==='/api/tasks'){const x=await body(req);const t={id:id(),title:String(x.title||'Untitled task'),status:'planned',priority:['low','medium','high','critical'].includes(x.priority)?x.priority:'medium',created_at:new Date().toISOString()};state.tasks.push(t);await save();return json(res,201,t)}
@@ -27,6 +27,9 @@ if(req.method==='POST'&&u.pathname==='/api/memory'){const x=await body(req);cons
 if(req.method==='GET'&&u.pathname==='/api/approvals')return json(res,200,{approvals:state.approvals});
 if(req.method==='POST'&&u.pathname==='/api/approvals'){const x=await body(req);const a={id:id(),action:String(x.action||''),status:'pending',created_at:new Date().toISOString()};state.approvals.push(a);await save();return json(res,201,a)}
 if(req.method==='PATCH'&&u.pathname.startsWith('/api/approvals/')){const a=state.approvals.find(x=>x.id===u.pathname.split('/').pop());if(!a)return json(res,404,{error:'not found'});Object.assign(a,await body(req));await save();return json(res,200,a)}
+if(req.method==='GET'&&u.pathname==='/api/automations')return json(res,200,{automations:state.automations});
+if(req.method==='POST'&&u.pathname==='/api/automations'){const x=await body(req);const a={id:id(),name:String(x.name||'Untitled automation'),agent:String(x.agent||'Executive'),schedule:String(x.schedule||''),enabled:x.enabled!==false,created_at:new Date().toISOString()};state.automations.push(a);await save();return json(res,201,a)}
+if(req.method==='PATCH'&&u.pathname.startsWith('/api/automations/')){const a=state.automations.find(x=>x.id===u.pathname.split('/').pop());if(!a)return json(res,404,{error:'not found'});const x=await body(req);if(x.name!==undefined)a.name=String(x.name);if(x.agent!==undefined)a.agent=String(x.agent);if(x.schedule!==undefined)a.schedule=String(x.schedule);if(x.enabled!==undefined)a.enabled=Boolean(x.enabled);await save();return json(res,200,a)}
 if(req.method==='POST'&&u.pathname==='/api/push/register'){const x=await body(req);if(x.token&&!state.push_tokens.includes(x.token))state.push_tokens.push(String(x.token));await save();return json(res,200,{ok:true})}
 if(req.method==='POST'&&u.pathname==='/api/push/test'){const x=await body(req);const title=String(x.title||'JARVIS');const bodyText=String(x.body||'Test notification');let sent=0;for(const token of state.push_tokens){if(await sendPush(token,title,bodyText))sent++}return json(res,200,{sent})}
 if(req.method==='POST'&&u.pathname==='/api/transcribe')return transcribe(req,res);
