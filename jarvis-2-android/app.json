@@ -2,13 +2,13 @@
   "expo": {
     "name":"JARVIS 2.0",
     "slug":"jarvis-2-android",
-    "version":"3.0.0",
+    "version":"3.1.0",
     "orientation":"portrait",
     "scheme":"jarvis",
     "userInterfaceStyle":"dark",
     "newArchEnabled":true,
-    "android":{"package":"com.jarvis.commandos","versionCode":1,"adaptiveIcon":{"backgroundColor":"#050812"}},
-    "plugins":["expo-router","expo-secure-store"],
+    "android":{"package":"com.jarvis.commandos","versionCode":2,"adaptiveIcon":{"backgroundColor":"#050812"}},
+    "plugins":["expo-router","expo-secure-store",["expo-audio",{"recordAudioAndroid":true,"enableBackgroundRecording":false,"enableBackgroundPlayback":true}],["expo-notifications",{"color":"#45d7ff"}]],
     "experiments":{"typedRoutes":true}
   }
 }
