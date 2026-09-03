@@ -1,26 +1,36 @@
-# Ω7 Relay — kontrakt serwera
+# Ω7 Relay Server
 
-Minimalny serwer ma być ślepym przekaźnikiem dla zaszyfrowanych pakietów E2EE.
+Serwer jest ślepym przekaźnikiem. Nie dostaje plaintextu wiadomości ani prywatnych kluczy Signal.
 
-## Endpointy docelowe
+## Endpointy
 
-- `POST /v1/pair/invites` — utworzenie krótkotrwałego zaproszenia.
-- `POST /v1/pair/consume` — jednorazowe zużycie zaproszenia.
-- `POST /v1/devices/approve` — zatwierdzenie urządzenia.
-- `POST /v1/devices/revoke` — odwołanie urządzenia.
-- `POST /v1/messages` — wyłącznie ciphertext E2EE.
-- `GET /v1/sync?cursor=...` — synchronizacja zaszyfrowanych zdarzeń.
-- `GET /v1/health` — health check.
+- `GET /v1/health`
+- `POST /v1/bootstrap` — utworzenie właściciela grupy; chronione `X-Bootstrap-Secret`.
+- `POST /v1/pair/invites` — krótkotrwałe zaproszenie 5 min.
+- `POST /v1/devices/register` — atomowe zużycie zaproszenia i dołączenie urządzenia.
+- `GET /v1/keys/{groupId}/{deviceId}` — publiczny bundle PQXDH.
+- `POST /v1/messages` — przyjęcie ciphertextu z idempotency key.
+- `GET /v1/sync?groupId=...&deviceId=...&cursor=...` — synchronizacja kursorem.
 
-## Twarde zasady
+## Uruchomienie
 
-- serwer nigdy nie przyjmuje plaintextu wiadomości;
-- prywatne klucze urządzeń nigdy nie trafiają na serwer;
-- zaproszenia QR są krótkotrwałe i jednorazowe;
-- wiadomości wymagają idempotency key;
-- członkostwo jest autoryzowane per grupa i urządzenie;
-- logi nie mogą zawierać treści, tokenów ani kluczy.
+1. Ustaw `OMEGA7_DB_PASSWORD`, `OMEGA7_AUTH_SECRET` i `OMEGA7_BOOTSTRAP_SECRET` jako sekrety środowiskowe.
+2. Zbuduj relay: `gradle build`.
+3. Uruchom `docker compose up -d --build`.
+4. Wystaw relay wyłącznie przez HTTPS z poprawną walidacją certyfikatu.
 
-## Bramka produkcyjna
+Sekrety nie mogą mieć wartości domyślnych.
 
-TLS, rate limiting, rotacja poświadczeń, trwała baza, testy awarii, backup/restore oraz niezależny audyt E2EE pozostają obowiązkowe przed produkcją.
+## Model bezpieczeństwa
+
+- limit grupy: 7 aktywnych urządzeń;
+- invite token jest losowy, przechowywany na serwerze wyłącznie jako HMAC i zużywany atomowo;
+- token urządzenia jest losowy, a w DB znajduje się tylko HMAC tokenu;
+- wiadomości są identyfikowane przez `idempotency_key` i mają unikalność per odbiorca;
+- synchronizacja używa monotonicznego `BIGSERIAL` cursor;
+- serwer nie wykonuje operacji kryptograficznych na plaintextach wiadomości;
+- logi aplikacji nie powinny zawierać tokenów, kluczy ani treści wiadomości.
+
+## Przed produkcją
+
+Wymagane są reverse-proxy TLS, rate limiting, monitoring bez treści wiadomości, backup/restore PostgreSQL, rotacja sekretów, testy penetracyjne, fuzzing API oraz niezależny audyt E2EE. Ten katalog nie jest dowodem wykonania tych testów.
