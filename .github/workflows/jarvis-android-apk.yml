@@ -1,0 +1,38 @@
+name: JARVIS Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'jarvis-2-android/**'
+      - '.github/workflows/jarvis-android-apk.yml'
+
+jobs:
+  build:
+    name: Validate and build APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jarvis-2-android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: jarvis-2-android/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Expo Doctor
+        run: npx expo-doctor
+
+      - name: Build Android APK on EAS
+        run: npx eas-cli@latest build --platform android --profile preview --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
