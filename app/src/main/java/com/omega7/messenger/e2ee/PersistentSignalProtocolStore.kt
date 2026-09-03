@@ -22,6 +22,7 @@ class PersistentSignalProtocolStore private constructor(private val stateStore:E
  private val knownPreKeyIds=linkedSetOf<Int>();private val knownSessionAddresses=linkedMapOf<String,SignalProtocolAddress>();private val trustedIdentityBytes=linkedMapOf<String,ByteArray>();private val lock=Any()
  init{restore()}
  val identityKeyPair:IdentityKeyPair get()=getIdentityKeyPair();val localRegistrationId:Int get()=getLocalRegistrationId();fun firstAvailablePreKeyId():Int=synchronized(lock){knownPreKeyIds.firstOrNull{containsPreKey(it)}?:-1}
+ fun availablePreKeyIds():List<Int>=synchronized(lock){knownPreKeyIds.filter{containsPreKey(it)}.sorted()}
  override fun saveIdentity(a:SignalProtocolAddress,k:IdentityKey):IdentityKeyStore.IdentityChange=synchronized(lock){val c=super.saveIdentity(a,k);trustedIdentityBytes[a.toString()]=k.serialize().clone();persistLocked();c}
  override fun storePreKey(id:Int,r:PreKeyRecord)=synchronized(lock){super.storePreKey(id,r);knownPreKeyIds+=id;persistLocked()}
  override fun removePreKey(id:Int)=synchronized(lock){super.removePreKey(id);knownPreKeyIds-=id;persistLocked()}
