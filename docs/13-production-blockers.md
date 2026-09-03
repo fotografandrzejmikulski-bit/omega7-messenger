@@ -27,7 +27,7 @@ Ten dokument jest bramką wydania. Kod może być rozwijany przed zamknięciem w
 
 ## Aktualny status
 
-Gałąź `omega7-production-e2ee` zawiera rzeczywistą integrację z libsignal oraz blind relay. Nie jest to jeszcze certyfikowany ani niezależnie audytowany produkt produkcyjny. Oficjalny libsignal 0.100.0 implementuje Signal Protocol/Double Ratchet i jest używany jako biblioteka kryptograficzna zamiast własnej implementacji kryptografii. citehttps://github.com/signalapp/libsignal/releases/tag/v0.100.0
+Gałąź `omega7-production-e2ee` zawiera rzeczywistą integrację z libsignal oraz blind relay. Nie jest to jeszcze certyfikowany ani niezależnie audytowany produkt produkcyjny. Oficjalny libsignal 0.100.0 implementuje Signal Protocol/Double Ratchet i jest używany jako biblioteka kryptograficzna zamiast własnej implementacji kryptografii.
 
 ## Zakaz fałszywego statusu
 
