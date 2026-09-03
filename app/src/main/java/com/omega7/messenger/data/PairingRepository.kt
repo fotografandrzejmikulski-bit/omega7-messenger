@@ -5,13 +5,16 @@ import com.omega7.messenger.pairing.PairingInvite
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Local queue of invitations awaiting server-side acceptance/approval. */
+/** Local encrypted queue of invitations awaiting provisioning. */
 class PairingRepository(context: Context) {
     private val store = EncryptedLocalStore(context, fileName = "omega7_pairing.bin")
 
     @Synchronized fun pending(): List<PairingInvite> = runCatching {
-        val array = JSONArray(store.load()?.toString(Charsets.UTF_8) ?: "[]")
-        buildList(array.length()) { for (i in 0 until array.length()) add(fromJson(array.getJSONObject(i))) }
+        val bytes = store.load() ?: return@runCatching emptyList()
+        try {
+            val array = JSONArray(bytes.toString(Charsets.UTF_8))
+            buildList(array.length()) { for (i in 0 until array.length()) add(fromJson(array.getJSONObject(i))) }
+        } finally { bytes.fill(0) }
     }.getOrDefault(emptyList())
 
     @Synchronized fun add(invite: PairingInvite) {
@@ -20,8 +23,7 @@ class PairingRepository(context: Context) {
     }
 
     @Synchronized fun remove(inviteId: String) {
-        val all = pending().filterNot { it.inviteId == inviteId }
-        save(all)
+        save(pending().filterNot { it.inviteId == inviteId })
     }
 
     @Synchronized fun clear() { store.delete() }
@@ -32,8 +34,16 @@ class PairingRepository(context: Context) {
     }
 
     private fun toJson(i: PairingInvite) = JSONObject().apply {
-        put("g", i.groupId); put("i", i.inviteId); put("e", i.expiresAtMillis); put("o", i.ownerDeviceId)
+        put("v", 3); put("g", i.groupId); put("i", i.inviteId); put("e", i.expiresAtMillis); put("o", i.ownerDeviceId)
         put("n", i.ownerName); put("k", i.ownerPublicKey); put("s", i.signature)
+        i.inviteToken?.let { put("t", it) }
+        i.relayBaseUrl?.let { put("r", it) }
     }
-    private fun fromJson(o: JSONObject) = PairingInvite(o.getString("g"), o.getString("i"), o.getLong("e"), o.getString("o"), o.getString("n"), o.getString("k"), o.getString("s"))
+
+    private fun fromJson(o: JSONObject): PairingInvite = PairingInvite(
+        o.getString("g"), o.getString("i"), o.getLong("e"), o.getString("o"),
+        o.getString("n"), o.getString("k"), o.getString("s"),
+        if (o.has("t") && !o.isNull("t")) o.getString("t") else null,
+        if (o.has("r") && !o.isNull("r")) o.getString("r") else null,
+    )
 }
