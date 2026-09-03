@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -24,17 +24,6 @@ jobs:
         run: gradle test
       - name: Lint
         run: gradle lintDebug
-      - name: Debug APK
-        run: gradle assembleDebug
-      - name: Release APK (unsigned)
-        run: gradle assembleRelease
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: omega7-debug-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
 
   relay-build:
     runs-on: ubuntu-latest
