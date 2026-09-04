@@ -24,6 +24,7 @@ class DeviceProvisioningCoordinator(context: Context) {
         val config = requireNotNull(relayConfig.load()) { "Brak skonfigurowanego relay." }
         val engine = SignalE2eeEngine.open(app)
         val keys = DeviceKeyManager()
+        val ownerBundle = engine.localBundle()
         RelayProvisioningClient(config.baseUrl, config.authToken).use { client ->
             val created = await { client.createInvite("omega7-main", engine.deviceId()) }.getOrThrow()
             PairingInvite.create(
@@ -33,15 +34,19 @@ class DeviceProvisioningCoordinator(context: Context) {
                 ownerPublicKey = keys.publicKeyDerBase64Url(),
                 inviteToken = created.second,
                 relayBaseUrl = config.baseUrl,
+                ownerSignalDeviceId = engine.deviceId(),
+                ownerSignalBundle = ownerBundle.toJson(),
                 sign = keys::sign,
             )
         }
     }
 
+    /** Build the join request locally. No private Signal material is placed into the QR. */
     fun createJoinMaterial(invite: PairingInvite): Result<JoinMaterial> = runCatching {
         require(invite.expiresAtMillis > System.currentTimeMillis()) { "Zaproszenie wygasło." }
         require(!invite.inviteToken.isNullOrBlank()) { "Zaproszenie nie zawiera rejestracyjnego tokenu relay." }
         require(!invite.relayBaseUrl.isNullOrBlank()) { "Zaproszenie nie zawiera adresu relay." }
+        require(invite.ownerSignalDeviceId != null && !invite.ownerSignalBundle.isNullOrBlank()) { "Zaproszenie nie zawiera bundla Signal właściciela." }
         val engine = SignalE2eeEngine.open(app)
         val keys = DeviceKeyManager()
         val request = PairingRequest.create(
@@ -92,6 +97,10 @@ class DeviceProvisioningCoordinator(context: Context) {
                 )
             }.getOrThrow()
             relayConfig.save(RelayConfigStore.Config(requireNotNull(invite.relayBaseUrl), token))
+            val ownerBundle = SignalE2eeEngine.DeviceBundle.fromJson(requireNotNull(invite.ownerSignalBundle))
+            require(ownerBundle.deviceId == requireNotNull(invite.ownerSignalDeviceId)) { "Bundle właściciela nie zgadza się z DeviceID." }
+            require(ownerBundle.deviceId != engine.deviceId()) { "Właściciel nie może być tym samym urządzeniem." }
+            engine.registerVerifiedDevice(invite.groupId, ownerBundle)
             token
         }
     }
