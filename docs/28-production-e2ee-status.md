@@ -23,7 +23,10 @@ Gałąź `omega7-production-e2ee` zawiera warstwę integracyjną z oficjalnym `l
 - Token relay oraz endpoint są przechowywane lokalnie w szyfrowanym magazynie konfiguracji.
 - Approval jest samowystarczalny: zawiera dane potrzebne do odtworzenia i ponownej weryfikacji dokładnego requestu urządzenia dołączającego.
 - Trwała szyfrowana kolejka outbound została dodana: szyfrogram jest zapisywany po jednorazowym wykonaniu E2EE, a ponowienia wykorzystują ten sam szyfrogram i idempotency key, zamiast ponownie wykonywać operację ratchet.
-- Retry outbound ma twardy limit i rosnące opóźnienia; po wyczerpaniu budżetu wpis pozostaje w stanie oczekującym i nie jest automatycznie ponawiany bez nowej decyzji warstwy wyższej.
+- Retry outbound ma twardy limit i rosnące opóźnienia.
+- Relay udostępnia uwierzytelniony katalog aktywnych urządzeń grupy. Katalog zwraca DeviceID i identity key bez konsumowania one-time prekey.
+- Android posiada warstwę bezpiecznej rekonsyliacji katalogu: nowe urządzenie pozostaje `UNKNOWN`, zgodne wcześniej zweryfikowane pozostaje `VERIFIED`, zmiana identity key przechodzi do `CHANGED`, a urządzenie znikające z aktywnego katalogu przechodzi do `REVOKED`. Rekonsyliacja nie nadaje zaufania automatycznie.
+- Klient poprawnie dekoduje parametry query przed autoryzacją i synchronizacją.
 - CI wykonuje testy jednostkowe, lint Androida i build relay; generowanie APK pozostaje wyłączone do czasu zamknięcia gate'u produkcyjnego.
 
 ## Aktualny gate — nadal NIE production ready
@@ -32,17 +35,18 @@ Kod nie może być jeszcze oznaczony jako **niezależnie zweryfikowane produkcyj
 
 1. rzeczywisty test dwóch i siedmiu fizycznych urządzeń;
 2. pełne spięcie wysyłania i odbierania wiadomości z trwałą kolejką, relay i `SessionCipher` — komponent kolejki i usługi wysyłającej są już zaimplementowane, ale wymagają integracji z głównym przepływem UI/workerem;
-3. obsługa wyczerpania one-time prekeys oraz bezpieczne uzupełnianie ich po stronie urządzenia;
-4. pełny Sesame-style lifecycle sesji: active/inactive, retry, orphaned state, bounded resend i recovery po utracie stanu;
-5. revocation + poprawna re-key/reestablishment wszystkich wymaganych sesji;
-6. szyfrowane załączniki;
-7. privacy-safe push;
-8. fuzzing parserów QR, JSON i kopert E2EE;
-9. testy penetracyjne backendu, rate limiting i abuse controls;
-10. testy współbieżności rejestracji, invite consumption, prekey consumption i wysyłki;
-11. backup/recovery/device replacement oraz jawna polityka utraty urządzenia;
-12. niezależny audyt kryptograficzny/security review;
-13. podpisany reproducible release, SBOM, integralność artefaktu i procedura aktualizacji.
+3. pełne spięcie katalogu urządzeń z UI i ustanawianiem sesji — obecna rekonsyliacja celowo nie awansuje `UNKNOWN` do `VERIFIED`;
+4. obsługa wyczerpania one-time prekeys oraz bezpieczne uzupełnianie ich po stronie urządzenia;
+5. pełny Sesame-style lifecycle sesji: active/inactive, retry, orphaned state, bounded resend i recovery po utracie stanu;
+6. revocation + poprawna re-key/reestablishment wszystkich wymaganych sesji;
+7. szyfrowane załączniki;
+8. privacy-safe push;
+9. fuzzing parserów QR, JSON i kopert E2EE;
+10. testy penetracyjne backendu, rate limiting i abuse controls;
+11. testy współbieżności rejestracji, invite consumption, prekey consumption i wysyłki;
+12. backup/recovery/device replacement oraz jawna polityka utraty urządzenia;
+13. niezależny audyt kryptograficzny/security review;
+14. podpisany reproducible release, SBOM, integralność artefaktu i procedura aktualizacji.
 
 Nie wolno usuwać tego gate'u tylko po to, aby status brzmiał „production ready”.
 
