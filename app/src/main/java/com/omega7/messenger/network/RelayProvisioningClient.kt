@@ -5,71 +5,75 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
-/** Control-plane client for first registration, invites, revocation and prekey publication. */
+/** Control-plane client for registration, owner approval, invites, revocation and prekey publication. */
 class RelayProvisioningClient(
     private val baseUrl: String,
     private val authToken: String? = null,
 ) : AutoCloseable {
     private val executor = Executors.newCachedThreadPool()
-
     init { require(baseUrl.startsWith("https://")) { "Relay musi używać HTTPS." } }
 
     suspend fun register(
         groupId: String,
         deviceId: Int,
         inviteToken: String,
+        requestSignature: String,
         bundle: SignalE2eeEngine.DeviceBundle,
         preKeys: List<RelayKeyClient.PreKey>,
     ): Result<String> = async {
         require(deviceId == bundle.deviceId && deviceId in 1..127)
+        require(requestSignature.isNotBlank() && requestSignature.length <= 1024)
         require(preKeys.size <= 64)
         val keys = JSONArray()
         preKeys.forEach { keys.put(JSONObject().put("id", it.id).put("key", b64(it.key))) }
         val body = JSONObject()
-            .put("groupId", groupId)
-            .put("deviceId", deviceId)
-            .put("inviteToken", inviteToken)
-            .put("registrationId", bundle.registrationId)
-            .put("identityKey", b64(bundle.identityKey))
-            .put("signedPreKeyId", bundle.signedPreKeyId)
-            .put("signedPreKey", b64(bundle.signedPreKey))
-            .put("signedPreKeySignature", b64(bundle.signedPreKeySignature))
-            .put("kyberPreKeyId", bundle.kyberPreKeyId)
-            .put("kyberPreKey", b64(bundle.kyberPreKey))
-            .put("kyberPreKeySignature", b64(bundle.kyberPreKeySignature))
-            .put("preKeys", keys)
-        request("POST", "/v1/devices/register", body.toString(), false)
-            .let { JSONObject(it).getString("authToken") }
+            .put("groupId", groupId).put("deviceId", deviceId).put("inviteToken", inviteToken)
+            .put("requestSignature", requestSignature).put("registrationId", bundle.registrationId)
+            .put("identityKey", b64(bundle.identityKey)).put("signedPreKeyId", bundle.signedPreKeyId)
+            .put("signedPreKey", b64(bundle.signedPreKey)).put("signedPreKeySignature", b64(bundle.signedPreKeySignature))
+            .put("kyberPreKeyId", bundle.kyberPreKeyId).put("kyberPreKey", b64(bundle.kyberPreKey))
+            .put("kyberPreKeySignature", b64(bundle.kyberPreKeySignature)).put("preKeys", keys)
+        request("POST", "/v1/devices/register", body.toString(), false).let { JSONObject(it).getString("authToken") }
+    }
+
+    suspend fun approve(
+        groupId: String,
+        inviteId: String,
+        ownerDeviceId: Int,
+        targetDeviceId: Int,
+        requestSignature: String,
+    ): Result<Unit> = async {
+        require(!authToken.isNullOrBlank()) { "Brak tokenu właściciela relay." }
+        require(ownerDeviceId in 1..127 && targetDeviceId in 1..127 && ownerDeviceId != targetDeviceId)
+        require(requestSignature.isNotBlank() && requestSignature.length <= 1024)
+        request("POST", "/v1/pair/approve", JSONObject()
+            .put("groupId", groupId).put("inviteId", UUID.fromString(inviteId).toString())
+            .put("ownerDeviceId", ownerDeviceId).put("targetDeviceId", targetDeviceId)
+            .put("requestSignature", requestSignature).toString(), true)
+        Unit
     }
 
     suspend fun createInvite(groupId: String, ownerDeviceId: Int): Result<Pair<String, String>> = async {
         require(!authToken.isNullOrBlank()) { "Brak tokenu właściciela relay." }
-        val response = request(
-            "POST", "/v1/pair/invites",
-            JSONObject().put("groupId", groupId).put("ownerDeviceId", ownerDeviceId).toString(), true,
-        )
-        val json = JSONObject(response)
-        Pair(json.getString("inviteId"), json.getString("inviteToken"))
+        val response = request("POST", "/v1/pair/invites", JSONObject().put("groupId", groupId).put("ownerDeviceId", ownerDeviceId).toString(), true)
+        val json = JSONObject(response); Pair(json.getString("inviteId"), json.getString("inviteToken"))
     }
 
     suspend fun revoke(groupId: String, ownerDeviceId: Int, targetDeviceId: Int): Result<Unit> = async {
         require(!authToken.isNullOrBlank()) { "Brak tokenu właściciela relay." }
-        request(
-            "POST", "/v1/devices/revoke",
-            JSONObject().put("groupId", groupId).put("ownerDeviceId", ownerDeviceId).put("targetDeviceId", targetDeviceId).toString(), true,
-        )
+        request("POST", "/v1/devices/revoke", JSONObject().put("groupId", groupId).put("ownerDeviceId", ownerDeviceId).put("targetDeviceId", targetDeviceId).toString(), true)
         Unit
     }
 
     suspend fun uploadPreKeys(groupId: String, deviceId: Int, preKeys: List<RelayKeyClient.PreKey>): Result<Unit> = async {
         require(!authToken.isNullOrBlank()) { "Brak tokenu relay." }
         require(preKeys.isNotEmpty() && preKeys.size <= 64)
-        val array = JSONArray()
-        preKeys.forEach { array.put(JSONObject().put("id", it.id).put("key", b64(it.key))) }
+        val array = JSONArray(); preKeys.forEach { array.put(JSONObject().put("id", it.id).put("key", b64(it.key))) }
         request("POST", "/v1/keys/prekeys", JSONObject().put("groupId", groupId).put("deviceId", deviceId).put("preKeys", array).toString(), true)
         Unit
     }
@@ -81,23 +85,14 @@ class RelayProvisioningClient(
     private fun request(method: String, path: String, body: String?, authenticated: Boolean): String {
         val connection = (URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
             require(url.protocol == "https") { "Niedozwolony transport bez TLS." }
-            requestMethod = method
-            connectTimeout = 10_000
-            readTimeout = 20_000
-            useCaches = false
-            doInput = true
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("Cache-Control", "no-store")
+            requestMethod = method; connectTimeout = 10_000; readTimeout = 20_000; useCaches = false; doInput = true
+            setRequestProperty("Accept", "application/json"); setRequestProperty("Cache-Control", "no-store")
             if (authenticated) setRequestProperty("Authorization", "Bearer ${requireNotNull(authToken)}")
-            if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
+            if (body != null) { doOutput = true; setRequestProperty("Content-Type", "application/json; charset=utf-8") }
         }
         return try {
             if (body != null) connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val status = connection.responseCode; val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
             if (status !in 200..299) throw IllegalStateException("Relay HTTP $status: ${response.take(256)}")
             response
