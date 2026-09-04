@@ -28,20 +28,13 @@ class DeviceProvisioningCoordinator(context: Context) {
         RelayProvisioningClient(config.baseUrl, config.authToken).use { client ->
             val created = await { client.createInvite("omega7-main", engine.deviceId()) }.getOrThrow()
             PairingInvite.create(
-                groupId = "omega7-main",
-                ownerDeviceId = engine.deviceId().toString(),
-                ownerName = android.os.Build.MODEL,
-                ownerPublicKey = keys.publicKeyDerBase64Url(),
-                inviteToken = created.second,
-                relayBaseUrl = config.baseUrl,
-                ownerSignalDeviceId = engine.deviceId(),
-                ownerSignalBundle = ownerBundle.toJson(),
-                sign = keys::sign,
+                groupId = "omega7-main", ownerDeviceId = engine.deviceId().toString(), ownerName = android.os.Build.MODEL,
+                ownerPublicKey = keys.publicKeyDerBase64Url(), inviteToken = created.second, relayBaseUrl = config.baseUrl,
+                ownerSignalDeviceId = engine.deviceId(), ownerSignalBundle = ownerBundle.toJson(), sign = keys::sign,
             )
         }
     }
 
-    /** Build the join request locally. No private Signal material is placed into the QR. */
     fun createJoinMaterial(invite: PairingInvite): Result<JoinMaterial> = runCatching {
         require(invite.expiresAtMillis > System.currentTimeMillis()) { "Zaproszenie wygasło." }
         require(!invite.inviteToken.isNullOrBlank()) { "Zaproszenie nie zawiera rejestracyjnego tokenu relay." }
@@ -50,14 +43,9 @@ class DeviceProvisioningCoordinator(context: Context) {
         val engine = SignalE2eeEngine.open(app)
         val keys = DeviceKeyManager()
         val request = PairingRequest.create(
-            groupId = invite.groupId,
-            inviteId = invite.inviteId,
-            deviceId = UUID.randomUUID().toString(),
-            displayName = android.os.Build.MODEL,
-            publicKey = keys.publicKeyDerBase64Url(),
-            signalDeviceId = engine.deviceId(),
-            signalBundle = engine.localBundle(),
-            sign = keys::sign,
+            groupId = invite.groupId, inviteId = invite.inviteId, deviceId = UUID.randomUUID().toString(),
+            displayName = android.os.Build.MODEL, publicKey = keys.publicKeyDerBase64Url(), signalDeviceId = engine.deviceId(),
+            signalBundle = engine.localBundle(), sign = keys::sign,
         )
         JoinMaterial(invite, request)
     }
@@ -66,11 +54,19 @@ class DeviceProvisioningCoordinator(context: Context) {
         require(invite.expiresAtMillis > System.currentTimeMillis()) { "Zaproszenie wygasło." }
         require(invite.groupId == request.groupId && invite.inviteId == request.inviteId) { "Żądanie nie pasuje do zaproszenia." }
         require(PairingRequest.verify(request)) { "Podpis urządzenia jest nieprawidłowy." }
-        require(request.signalDeviceId != null && request.signalBundle != null) { "Żądanie nie zawiera kompletnego bundla Signal." }
+        val target = requireNotNull(request.signalDeviceId) { "Brak Signal DeviceID." }
+        require(!request.signalBundle.isNullOrBlank()) { "Żądanie nie zawiera bundla Signal." }
         val keys = DeviceKeyManager()
         require(keys.publicKeyDerBase64Url() == invite.ownerPublicKey) { "Zaproszenie nie pochodzi z tego urządzenia właściciela." }
-        PairingApproval.create(invite, request, keys::sign)
+        val approval = PairingApproval.create(invite, request, keys::sign)
+        val config = requireNotNull(relayConfig.load()) { "Brak skonfigurowanego relay właściciela." }
+        RelayProvisioningClient(config.baseUrl, config.authToken).use { client ->
+            await { client.approve(invite.groupId, invite.inviteId, requestOwnerSignalId(invite), target, request.signature) }.getOrThrow()
+        }
+        approval
     }
+
+    private fun requestOwnerSignalId(invite: PairingInvite): Int = requireNotNull(invite.ownerSignalDeviceId) { "Brak Signal DeviceID właściciela." }
 
     fun completeRegistration(invite: PairingInvite, request: PairingRequest, approval: PairingApproval): Result<String> = runCatching {
         require(invite.expiresAtMillis > System.currentTimeMillis()) { "Zaproszenie wygasło." }
@@ -80,22 +76,12 @@ class DeviceProvisioningCoordinator(context: Context) {
         val bundle = SignalE2eeEngine.DeviceBundle.fromJson(requireNotNull(request.signalBundle))
         require(bundle.deviceId == requireNotNull(request.signalDeviceId)) { "Signal DeviceID nie zgadza się z bundle." }
         require(bundle.deviceId in 1..127) { "Nieprawidłowy Signal DeviceID." }
-
         val engine = SignalE2eeEngine.open(app)
         require(engine.deviceId() == bundle.deviceId) { "Bundle nie należy do tego urządzenia." }
         val preKeys = engine.localPreKeys().map { (id, key) -> RelayKeyClient.PreKey(id, key) }
         require(preKeys.isNotEmpty()) { "Brak lokalnych one-time prekeys." }
-
         RelayProvisioningClient(requireNotNull(invite.relayBaseUrl)).use { client ->
-            val token = await {
-                client.register(
-                    groupId = invite.groupId,
-                    deviceId = bundle.deviceId,
-                    inviteToken = requireNotNull(invite.inviteToken),
-                    bundle = bundle,
-                    preKeys = preKeys,
-                )
-            }.getOrThrow()
+            val token = await { client.register(invite.groupId, bundle.deviceId, requireNotNull(invite.inviteToken), request.signature, bundle, preKeys) }.getOrThrow()
             relayConfig.save(RelayConfigStore.Config(requireNotNull(invite.relayBaseUrl), token))
             val ownerBundle = SignalE2eeEngine.DeviceBundle.fromJson(requireNotNull(invite.ownerSignalBundle))
             require(ownerBundle.deviceId == requireNotNull(invite.ownerSignalDeviceId)) { "Bundle właściciela nie zgadza się z DeviceID." }
@@ -105,7 +91,6 @@ class DeviceProvisioningCoordinator(context: Context) {
         }
     }
 
-    /** Owner-side finalization. The joiner must have completed registration first. */
     fun finalizeOwnerEnrollment(groupId: String, remoteDeviceId: Int): Result<Unit> = runCatching {
         require(groupId.isNotBlank() && groupId.length <= 128)
         val config = requireNotNull(relayConfig.load()) { "Brak skonfigurowanego relay właściciela." }
@@ -123,10 +108,7 @@ class DeviceProvisioningCoordinator(context: Context) {
         val latch = CountDownLatch(1)
         block.startCoroutine(object : Continuation<Result<T>> {
             override val context = EmptyCoroutineContext
-            override fun resumeWith(result: Result<Result<T>>) {
-                outcome = result.getOrElse { Result.failure(it) }
-                latch.countDown()
-            }
+            override fun resumeWith(result: Result<Result<T>>) { outcome = result.getOrElse { Result.failure(it) }; latch.countDown() }
         })
         if (!latch.await(30, TimeUnit.SECONDS)) return Result.failure(IllegalStateException("Przekroczono limit czasu operacji relay."))
         return outcome ?: Result.failure(IllegalStateException("Brak wyniku operacji relay."))
