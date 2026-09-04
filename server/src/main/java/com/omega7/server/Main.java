@@ -39,6 +39,7 @@ public final class Main {
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 128);
         server.createContext("/v1/health", Main::health);
         server.createContext("/v1/devices/register", Main::register);
+        server.createContext("/v1/devices", Main::devices);
         server.createContext("/v1/bootstrap", Main::bootstrap);
         server.createContext("/v1/pair/invites", Main::createInvite);
         server.createContext("/v1/pair/approve", Main::approve);
@@ -74,6 +75,36 @@ public final class Main {
         if (!method(x, "GET")) return;
         try (Connection c = db(); Statement s = c.createStatement(); ResultSet r = s.executeQuery("SELECT 1")) { json(x, 200, obj().put("status", "ok")); }
         catch (Exception e) { json(x, 503, obj().put("status", "degraded")); }
+    }
+
+    /** Returns active group membership without consuming one-time prekeys. */
+    private static void devices(HttpExchange x) throws IOException {
+        if (!method(x, "GET")) return;
+        String token = auth(x);
+        if (token == null) { json(x, 401, error("Brak uwierzytelnienia.")); return; }
+        String group = qDecoded(x, "groupId");
+        String requesterRaw = qDecoded(x, "requesterDeviceId");
+        if (group == null || group.length() > 128 || requesterRaw == null) { json(x, 400, error("Brak parametrów urządzeń.")); return; }
+        int requester;
+        try { requester = Integer.parseInt(requesterRaw); } catch (Exception e) { json(x, 400, error("Nieprawidłowy requesterDeviceId.")); return; }
+        if (requester < 1 || requester > 127) { json(x, 400, error("Nieprawidłowy requesterDeviceId.")); return; }
+        try (Connection c = db()) {
+            if (!authorized(c, group, requester, token)) { json(x, 403, error("Brak uprawnień.")); return; }
+            try (PreparedStatement p = c.prepareStatement("SELECT device_id,identity_key,created_at,updated_at FROM devices WHERE group_id=? AND active=true ORDER BY device_id ASC")) {
+                p.setString(1, group);
+                try (ResultSet r = p.executeQuery()) {
+                    ArrayNode list = JSON.createArrayNode();
+                    while (r.next()) {
+                        list.add(obj()
+                                .put("deviceId", r.getInt(1))
+                                .put("identityKey", b64(r.getBytes(2)))
+                                .put("createdAt", r.getTimestamp(3).toInstant().toString())
+                                .put("updatedAt", r.getTimestamp(4).toInstant().toString()));
+                    }
+                    json(x, 200, obj().put("groupId", group).put("requesterDeviceId", requester).set("devices", list));
+                }
+            }
+        } catch (Exception e) { json(x, 503, error("Błąd katalogu urządzeń.")); }
     }
 
     private static void bootstrap(HttpExchange x) throws IOException {
@@ -201,8 +232,8 @@ public final class Main {
         if (!method(x, "GET")) return; String token = auth(x); if (token == null) { json(x, 401, error("Brak uwierzytelnienia.")); return; }
         String[] parts = x.getRequestURI().getPath().split("/"); if (parts.length < 5) { json(x, 400, error("Brak identyfikatora.")); return; }
         String group = parts[3]; int device; try { device = Integer.parseInt(parts[4]); } catch (Exception e) { json(x, 400, error("Nieprawidłowe urządzenie.")); return; }
-        String requesterRaw = q(x, "requesterDeviceId"); if (requesterRaw == null) { json(x, 400, error("Brak requesterDeviceId.")); return; }
-        int requester; try { requester = Integer.parseInt(requesterRaw); } catch (Exception e) { json(x, 400, error("Nieprawidłowe requesterDeviceId.")); return; }
+        String requesterRaw = qDecoded(x, "requesterDeviceId"); if (requesterRaw == null) { json(x, 400, error("Brak requesterDeviceId.")); return; }
+        int requester; try { requester = Integer.parseInt(requesterRaw); } catch (Exception e) { json(x, 400, error("Nieprawidłowy requesterDeviceId.")); return; }
         if (requester < 1 || requester > 127 || requester == device) { json(x, 400, error("Nieprawidłowe urządzenie żądające.")); return; }
         try (Connection c = db()) {
             if (!authorized(c, group, requester, token)) { json(x, 403, error("Brak uprawnień.")); return; }
@@ -232,35 +263,23 @@ public final class Main {
         try (Connection c = db()) {
             if (!authorized(c, group, sender, token)) { json(x, 403, error("Brak uprawnień.")); return; }
             try (PreparedStatement target = c.prepareStatement("SELECT 1 FROM devices WHERE group_id=? AND device_id=? AND active=true")) { target.setString(1, group); target.setInt(2, recipient); try (ResultSet rs = target.executeQuery()) { if (!rs.next()) { json(x, 404, error("Urządzenie docelowe nie istnieje lub jest odwołane.")); return; } } }
-            try (PreparedStatement p = c.prepareStatement("INSERT INTO messages(group_id,recipient_device_id,sender_device_id,idempotency_key,ciphertext) VALUES(?,?,?,?,?) ON CONFLICT(group_id,recipient_device_id,idempotency_key) DO NOTHING")) { p.setString(1, group); p.setInt(2, recipient); p.setInt(3, sender); p.setString(4, idem); p.setBytes(5, cipher); p.executeUpdate(); }
+            try (PreparedStatement p = c.prepareStatement("INSERT INTO messages(group_id,recipient_device_id,sender_device_id,idempotency_key,ciphertext) VALUES(?,?,?,?,?) ON CONFLICT(group_id,recipient_device_id,idempotency_key) DO NOTHING")) { p.setString(1, group); p.setInt(2, sender); p.setInt(3, recipient); p.setString(4, idem); p.setBytes(5, cipher); p.executeUpdate(); }
             json(x, 202, obj().put("accepted", true));
         } catch (Exception e) { json(x, 503, error("Błąd zapisu.")); }
     }
 
     private static void sync(HttpExchange x) throws IOException {
         if (!method(x, "GET")) return; String token = auth(x); if (token == null) { json(x, 401, error("Brak uwierzytelnienia.")); return; }
-        String group = q(x, "groupId"), cur = q(x, "cursor"), deviceRaw = q(x, "deviceId"); if (group == null || group.length() > 128 || deviceRaw == null) { json(x, 400, error("Brak parametrów synchronizacji.")); return; }
+        String group = qDecoded(x, "groupId"), cur = qDecoded(x, "cursor"), deviceRaw = qDecoded(x, "deviceId"); if (group == null || group.length() > 128 || deviceRaw == null) { json(x, 400, error("Brak parametrów synchronizacji.")); return; }
         int device; try { device = Integer.parseInt(deviceRaw); } catch (Exception e) { json(x, 400, error("Nieprawidłowe urządzenie.")); return; }
         long cursor; try { cursor = cur == null ? 0 : Long.parseLong(cur); if (cursor < 0) throw new NumberFormatException(); } catch (Exception e) { json(x, 400, error("Nieprawidłowy kursor.")); return; }
         try (Connection c = db()) { if (!authorized(c, group, device, token)) { json(x, 403, error("Brak uprawnień.")); return; }
             try (PreparedStatement p = c.prepareStatement("SELECT seq,sender_device_id,idempotency_key,ciphertext,created_at FROM messages WHERE group_id=? AND recipient_device_id=? AND seq>? ORDER BY seq ASC LIMIT 100")) {
                 p.setString(1, group); p.setInt(2, device); p.setLong(3, cursor);
                 try (ResultSet r = p.executeQuery()) {
-                    ArrayNode a = JSON.createArrayNode();
-                    long next = cursor;
-                    while (r.next()) {
-                        next = r.getLong(1);
-                        ObjectNode row = obj()
-                                .put("seq", next)
-                                .put("senderDeviceId", r.getInt(2))
-                                .put("idempotencyKey", r.getString(3))
-                                .put("ciphertext", b64(r.getBytes(4)))
-                                .put("createdAt", r.getTimestamp(5).toInstant().toString());
-                        a.add(row);
-                    }
-                    ObjectNode response = obj().put("cursor", next);
-                    response.set("messages", a);
-                    json(x, 200, response);
+                    ArrayNode a = JSON.createArrayNode(); long next = cursor;
+                    while (r.next()) { next = r.getLong(1); ObjectNode row = obj().put("seq", next).put("senderDeviceId", r.getInt(2)).put("idempotencyKey", r.getString(3)).put("ciphertext", b64(r.getBytes(4))).put("createdAt", r.getTimestamp(5).toInstant().toString()); a.add(row); }
+                    ObjectNode response = obj().put("cursor", next); response.set("messages", a); json(x, 200, response);
                 }
             }
         } catch (Exception e) { json(x, 503, error("Błąd synchronizacji.")); }
@@ -283,7 +302,7 @@ public final class Main {
     private static ObjectNode obj() { return JSON.createObjectNode(); }
     private static ObjectNode error(String s) { return obj().put("error", s); }
     private static boolean method(HttpExchange x, String m) throws IOException { if (!x.getRequestMethod().equals(m)) { x.getResponseHeaders().set("Allow", m); json(x, 405, error("Metoda niedozwolona.")); return false; } return true; }
-    private static String q(HttpExchange x, String k) { String query = x.getRequestURI().getRawQuery(); if (query == null) return null; for (String p : query.split("&")) { String[] a = p.split("=", 2); if (a.length == 2 && a[0].equals(k)) return a[1]; } return null; }
+    private static String qDecoded(HttpExchange x, String k) { String query = x.getRequestURI().getRawQuery(); if (query == null) return null; for (String p : query.split("&")) { String[] a = p.split("=", 2); if (a.length == 2 && a[0].equals(k)) { try { return java.net.URLDecoder.decode(a[1], StandardCharsets.UTF_8); } catch (IllegalArgumentException e) { return null; } } } return null; }
     private static void json(HttpExchange x, int status, JsonNode body) throws IOException { byte[] b = JSON.writeValueAsBytes(body); x.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8"); x.getResponseHeaders().set("Cache-Control", "no-store"); x.sendResponseHeaders(status, b.length); try (var o = x.getResponseBody()) { o.write(b); } }
     private static String env(String k, String d) { String v = System.getenv(k); return v == null || v.isBlank() ? d : v; }
     private static void require(boolean ok, String what) { if (!ok) throw new IllegalArgumentException(what); }
