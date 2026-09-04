@@ -34,10 +34,18 @@ class PairingRepository(context: Context) {
     }
 
     private fun toJson(i: PairingInvite) = JSONObject().apply {
-        put("v", 3); put("g", i.groupId); put("i", i.inviteId); put("e", i.expiresAtMillis); put("o", i.ownerDeviceId)
-        put("n", i.ownerName); put("k", i.ownerPublicKey); put("s", i.signature)
+        put("v", 4)
+        put("g", i.groupId)
+        put("i", i.inviteId)
+        put("e", i.expiresAtMillis)
+        put("o", i.ownerDeviceId)
+        put("n", i.ownerName)
+        put("k", i.ownerPublicKey)
+        put("s", i.signature)
         i.inviteToken?.let { put("t", it) }
         i.relayBaseUrl?.let { put("r", it) }
+        i.ownerSignalDeviceId?.let { put("sd", it) }
+        i.ownerSignalBundle?.let { put("sb", it) }
     }
 
     private fun fromJson(o: JSONObject): PairingInvite = PairingInvite(
@@ -45,5 +53,7 @@ class PairingRepository(context: Context) {
         o.getString("n"), o.getString("k"), o.getString("s"),
         if (o.has("t") && !o.isNull("t")) o.getString("t") else null,
         if (o.has("r") && !o.isNull("r")) o.getString("r") else null,
+        if (o.has("sd") && !o.isNull("sd")) o.getInt("sd") else null,
+        if (o.has("sb") && !o.isNull("sb")) o.getString("sb") else null,
     )
 }
