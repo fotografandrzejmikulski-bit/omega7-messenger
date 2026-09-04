@@ -22,6 +22,8 @@ Gałąź `omega7-production-e2ee` zawiera warstwę integracyjną z oficjalnym `l
 - QR provisioning jest spięty z warstwą produkcyjną: owner tworzy serwerowe zaproszenie, joiner tworzy podpisany request z bundlem Signal, owner tworzy podpisane approval, joiner rejestruje bundle i otrzymuje token relay, a owner może następnie pobrać bundle i ustanowić sesję Signal przed oznaczeniem urządzenia jako zaufanego.
 - Token relay oraz endpoint są przechowywane lokalnie w szyfrowanym magazynie konfiguracji.
 - Approval jest samowystarczalny: zawiera dane potrzebne do odtworzenia i ponownej weryfikacji dokładnego requestu urządzenia dołączającego.
+- Trwała szyfrowana kolejka outbound została dodana: szyfrogram jest zapisywany po jednorazowym wykonaniu E2EE, a ponowienia wykorzystują ten sam szyfrogram i idempotency key, zamiast ponownie wykonywać operację ratchet.
+- Retry outbound ma twardy limit i rosnące opóźnienia; po wyczerpaniu budżetu wpis pozostaje w stanie oczekującym i nie jest automatycznie ponawiany bez nowej decyzji warstwy wyższej.
 - CI wykonuje testy jednostkowe, lint Androida i build relay; generowanie APK pozostaje wyłączone do czasu zamknięcia gate'u produkcyjnego.
 
 ## Aktualny gate — nadal NIE production ready
@@ -29,7 +31,7 @@ Gałąź `omega7-production-e2ee` zawiera warstwę integracyjną z oficjalnym `l
 Kod nie może być jeszcze oznaczony jako **niezależnie zweryfikowane produkcyjne E2EE**. Nadal wymagane są:
 
 1. rzeczywisty test dwóch i siedmiu fizycznych urządzeń;
-2. pełne spięcie wysyłania i odbierania wiadomości z trwałą kolejką, relay i `SessionCipher`;
+2. pełne spięcie wysyłania i odbierania wiadomości z trwałą kolejką, relay i `SessionCipher` — komponent kolejki i usługi wysyłającej są już zaimplementowane, ale wymagają integracji z głównym przepływem UI/workerem;
 3. obsługa wyczerpania one-time prekeys oraz bezpieczne uzupełnianie ich po stronie urządzenia;
 4. pełny Sesame-style lifecycle sesji: active/inactive, retry, orphaned state, bounded resend i recovery po utracie stanu;
 5. revocation + poprawna re-key/reestablishment wszystkich wymaganych sesji;
