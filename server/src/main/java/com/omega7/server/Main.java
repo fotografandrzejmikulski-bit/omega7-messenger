@@ -244,7 +244,24 @@ public final class Main {
         long cursor; try { cursor = cur == null ? 0 : Long.parseLong(cur); if (cursor < 0) throw new NumberFormatException(); } catch (Exception e) { json(x, 400, error("Nieprawidłowy kursor.")); return; }
         try (Connection c = db()) { if (!authorized(c, group, device, token)) { json(x, 403, error("Brak uprawnień.")); return; }
             try (PreparedStatement p = c.prepareStatement("SELECT seq,sender_device_id,idempotency_key,ciphertext,created_at FROM messages WHERE group_id=? AND recipient_device_id=? AND seq>? ORDER BY seq ASC LIMIT 100")) {
-                p.setString(1, group); p.setInt(2, device); p.setLong(3, cursor); try (ResultSet r = p.executeQuery()) { ArrayNode a = JSON.createArrayNode(); long next = cursor; while (r.next()) { next = r.getLong(1); a.add(obj().put("seq", next).put("senderDeviceId", r.getInt(2)).put("idempotencyKey", r.getString(3)).put("ciphertext", b64(r.getBytes(4))).put("createdAt", r.getTimestamp(5).toInstant().toString()); } json(x, 200, obj().put("cursor", next).set("messages", a)); }
+                p.setString(1, group); p.setInt(2, device); p.setLong(3, cursor);
+                try (ResultSet r = p.executeQuery()) {
+                    ArrayNode a = JSON.createArrayNode();
+                    long next = cursor;
+                    while (r.next()) {
+                        next = r.getLong(1);
+                        ObjectNode row = obj()
+                                .put("seq", next)
+                                .put("senderDeviceId", r.getInt(2))
+                                .put("idempotencyKey", r.getString(3))
+                                .put("ciphertext", b64(r.getBytes(4)))
+                                .put("createdAt", r.getTimestamp(5).toInstant().toString());
+                        a.add(row);
+                    }
+                    ObjectNode response = obj().put("cursor", next);
+                    response.set("messages", a);
+                    json(x, 200, response);
+                }
             }
         } catch (Exception e) { json(x, 503, error("Błąd synchronizacji.")); }
     }
