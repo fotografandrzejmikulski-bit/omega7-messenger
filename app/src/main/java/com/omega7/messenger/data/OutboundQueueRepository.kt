@@ -41,8 +41,10 @@ class OutboundQueueRepository(context: Context) {
         persistLocked()
     }
 
+    /** Returns null when the bounded retry budget has been exhausted. */
     fun markRetry(messageId: String, nowMillis: Long = System.currentTimeMillis()): Entry? = synchronized(lock) {
         val current = entries[messageId] ?: return@synchronized null
+        if (current.attempts >= MAX_RETRY_ATTEMPTS) return@synchronized null
         val attempts = current.attempts + 1
         val delay = RETRY_DELAYS_MILLIS[minOf(attempts - 1, RETRY_DELAYS_MILLIS.lastIndex)]
         val updated = current.copy(attempts = attempts, nextAttemptAtMillis = nowMillis + delay)
@@ -85,7 +87,9 @@ class OutboundQueueRepository(context: Context) {
                         o.getString("messageId"), o.getString("groupId"), o.getString("senderDeviceId"),
                         cipher, o.getLong("createdAtMillis"), o.getString("idempotencyKey")
                     )
-                    entries[message.messageId] = Entry(message, o.getInt("attempts"), o.getLong("nextAttemptAtMillis"))
+                    val attempts = o.getInt("attempts")
+                    require(attempts in 0..MAX_RETRY_ATTEMPTS)
+                    entries[message.messageId] = Entry(message, attempts, o.getLong("nextAttemptAtMillis"))
                 }
             }.onFailure { entries.clear() }
         }
