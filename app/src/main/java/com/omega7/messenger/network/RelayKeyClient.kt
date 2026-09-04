@@ -10,8 +10,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 /**
- * Client for public Signal bundle discovery and authenticated one-time-prekey replenishment.
- * Bundle retrieval is authenticated to prevent unauthenticated prekey exhaustion.
+ * Authenticated Signal bundle discovery and membership directory client.
+ * Directory discovery never consumes one-time prekeys; bundle retrieval may consume one.
  */
 class RelayKeyClient(
     private val baseUrl: String,
@@ -24,6 +24,46 @@ class RelayKeyClient(
         require(baseUrl.startsWith("https://")) { "Relay musi używać HTTPS." }
         require(authToken.isNotBlank()) { "Brak tokenu relay." }
         require(deviceId in 1..127) { "Nieprawidłowy DeviceID." }
+    }
+
+    data class DeviceDirectoryEntry(
+        val deviceId: Int,
+        val identityKeyBase64: String,
+        val createdAt: String,
+        val updatedAt: String,
+    ) {
+        init {
+            require(deviceId in 1..127)
+            require(identityKeyBase64.isNotBlank())
+        }
+    }
+
+    suspend fun listDevices(groupId: String): Result<List<DeviceDirectoryEntry>> = async {
+        require(groupId.isNotBlank() && groupId.length <= 128)
+        val response = request(
+            "GET",
+            "/v1/devices?groupId=${encode(groupId)}&requesterDeviceId=$deviceId",
+            null,
+            authenticated = true,
+        )
+        val root = JSONObject(response)
+        require(root.getString("groupId") == groupId)
+        require(root.getInt("requesterDeviceId") == deviceId)
+        val array = root.getJSONArray("devices")
+        require(array.length() in 1..7)
+        buildList(array.length()) {
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                add(DeviceDirectoryEntry(
+                    deviceId = item.getInt("deviceId"),
+                    identityKeyBase64 = item.getString("identityKey"),
+                    createdAt = item.getString("createdAt"),
+                    updatedAt = item.getString("updatedAt"),
+                ))
+            }
+        }.also {
+            require(it.map { d -> d.deviceId }.distinct().size == it.size) { "Relay zwrócił duplikaty urządzeń." }
+        }
     }
 
     suspend fun fetchBundle(groupId: String, remoteDeviceId: Int): Result<SignalE2eeEngine.DeviceBundle> =
