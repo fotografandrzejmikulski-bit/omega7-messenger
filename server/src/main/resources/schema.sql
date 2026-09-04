@@ -43,8 +43,14 @@ CREATE TABLE IF NOT EXISTS invites (
   owner_device_id INTEGER NOT NULL,
   token_hash BYTEA NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
-  consumed_at TIMESTAMPTZ
+  consumed_at TIMESTAMPTZ,
+  approved_device_id INTEGER,
+  approved_request_hash BYTEA,
+  approved_at TIMESTAMPTZ
 );
+
+CREATE INDEX IF NOT EXISTS invites_approval_idx
+  ON invites(group_id, invite_id, approved_device_id, approved_at);
 
 CREATE TABLE IF NOT EXISTS messages (
   seq BIGSERIAL PRIMARY KEY,
