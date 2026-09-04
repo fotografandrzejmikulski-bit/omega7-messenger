@@ -2,7 +2,7 @@
 
 ## Stan implementacji
 
-Gałąź `omega7-production-e2ee` zawiera działającą warstwę integracyjną z oficjalnym `libsignal` 0.100.0 oraz backend blind-relay oparty o PostgreSQL.
+Gałąź `omega7-production-e2ee` zawiera warstwę integracyjną z oficjalnym `libsignal` 0.100.0 oraz backend blind-relay oparty o PostgreSQL.
 
 ### Zaimplementowane w kodzie
 
@@ -15,29 +15,35 @@ Gałąź `omega7-production-e2ee` zawiera działającą warstwę integracyjną z
 - Odrzucanie niedozwolonych typów wiadomości oraz ograniczenia rozmiaru.
 - Persistowanie stanu po mutacjach kryptograficznych.
 - Blokada automatycznej podmiany zaufanego identity key: zmiana wymaga ponownej weryfikacji.
-- Twardy limit 7 urządzeń po stronie klienta.
+- Twardy limit 7 urządzeń po stronie klienta i serwera.
 - Backend z PostgreSQL, atomowym zużyciem jednorazowego zaproszenia, blokadą wiersza grupy przy kontroli limitu, idempotency key i monotonicznym cursorem.
 - Serwer nie posiada kodu odszyfrowującego wiadomości.
 - `usesCleartextTraffic=false` i uprawnienie INTERNET po stronie Androida.
-- CI buduje aplikację Android i relay backend.
+- QR provisioning jest spięty z warstwą produkcyjną: owner tworzy serwerowe zaproszenie, joiner tworzy podpisany request z bundlem Signal, owner tworzy podpisane approval, joiner rejestruje bundle i otrzymuje token relay, a owner może następnie pobrać bundle i ustanowić sesję Signal przed oznaczeniem urządzenia jako zaufanego.
+- Token relay oraz endpoint są przechowywane lokalnie w szyfrowanym magazynie konfiguracji.
+- Approval jest samowystarczalny: zawiera dane potrzebne do odtworzenia i ponownej weryfikacji dokładnego requestu urządzenia dołączającego.
+- CI wykonuje testy jednostkowe, lint Androida i build relay; generowanie APK pozostaje wyłączone do czasu zamknięcia gate'u produkcyjnego.
 
-## Ważne ograniczenie
+## Aktualny gate — nadal NIE production ready
 
 Kod nie może być jeszcze oznaczony jako **niezależnie zweryfikowane produkcyjne E2EE**. Nadal wymagane są:
 
 1. rzeczywisty test dwóch i siedmiu fizycznych urządzeń;
-2. integracja UI z rejestrowaniem bundle/tokenu oraz HTTP relay;
-3. pełne testy offline/online, reorder, duplicate, replay i recovery;
-4. revocation + poprawna rotacja/reestablishment wszystkich sesji;
-5. szyfrowane załączniki;
-6. privacy-safe push;
-7. fuzzing parserów i kopert;
-8. testy penetracyjne backendu i rate limiting;
-9. niezależny audyt kryptograficzny/security review;
-10. podpisany reproducible release i procedura aktualizacji.
+2. pełne spięcie wysyłania i odbierania wiadomości z trwałą kolejką, relay i `SessionCipher`;
+3. obsługa wyczerpania one-time prekeys oraz bezpieczne uzupełnianie ich po stronie urządzenia;
+4. pełny Sesame-style lifecycle sesji: active/inactive, retry, orphaned state, bounded resend i recovery po utracie stanu;
+5. revocation + poprawna re-key/reestablishment wszystkich wymaganych sesji;
+6. szyfrowane załączniki;
+7. privacy-safe push;
+8. fuzzing parserów QR, JSON i kopert E2EE;
+9. testy penetracyjne backendu, rate limiting i abuse controls;
+10. testy współbieżności rejestracji, invite consumption, prekey consumption i wysyłki;
+11. backup/recovery/device replacement oraz jawna polityka utraty urządzenia;
+12. niezależny audyt kryptograficzny/security review;
+13. podpisany reproducible release, SBOM, integralność artefaktu i procedura aktualizacji.
 
 Nie wolno usuwać tego gate'u tylko po to, aby status brzmiał „production ready”.
 
-## Źródło protokołu
+## Źródło modelu sesji
 
-Ω7 nie implementuje własnego Double Ratchet/PQXDH/KDF. Integracja korzysta z libsignal, zgodnie z oficjalnymi specyfikacjami Signal dotyczącymi Double Ratchet i Sesame.
+Sesame jest modelem zarządzania asynchronicznymi sesjami wielourządzeniowymi: każde urządzenie utrzymuje stan sesji per urządzenie zdalne, obsługuje dodawanie/usuwanie urządzeń oraz sytuacje utraty, opóźnienia, duplikacji i zmiany klucza tożsamości. Ω7 korzysta z tych zasad na poziomie architektury, ale nie jest implementacją Signal ani oficjalnym klientem Signal. citeturn0search0
