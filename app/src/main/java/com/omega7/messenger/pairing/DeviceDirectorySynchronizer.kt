@@ -1,8 +1,6 @@
 package com.omega7.messenger.pairing
 
 import android.content.Context
-import com.omega7.messenger.crypto.LocalCipher
-import com.omega7.messenger.data.EncryptedLocalStore
 import com.omega7.messenger.data.DeviceTrustRepository
 import com.omega7.messenger.network.RelayKeyClient
 import com.omega7.messenger.security.DeviceTrust
@@ -14,8 +12,7 @@ import java.util.Base64
  * promoting newly discovered devices to VERIFIED.
  */
 class DeviceDirectorySynchronizer(context: Context) {
-    private val app = context.applicationContext
-    private val trust = DeviceTrustRepository(app)
+    private val trust = DeviceTrustRepository(context.applicationContext)
 
     fun reconcile(entries: List<RelayKeyClient.DeviceDirectoryEntry>): Result<List<DeviceTrust.TrustedDevice>> = runCatching {
         require(entries.size in 1..7) { "Nieprawidłowa liczba urządzeń." }
@@ -47,6 +44,6 @@ class DeviceDirectorySynchronizer(context: Context) {
         val raw = try { Base64.getDecoder().decode(identityKeyBase64) }
         catch (_: IllegalArgumentException) { throw IllegalArgumentException("Nieprawidłowy identity key.") }
         require(raw.isNotEmpty() && raw.size <= 4096) { "Nieprawidłowy identity key." }
-        return MessageDigest.getInstance("SHA-256").digest(raw).joinToString("") { "%02x".format(it) }
+        return MessageDigest.getInstance("SHA-256").digest(raw).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 }
