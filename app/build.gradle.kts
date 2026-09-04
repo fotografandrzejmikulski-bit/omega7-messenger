@@ -41,5 +41,6 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("org.signal:libsignal-client:0.100.0")
     implementation("org.signal:libsignal-android:0.100.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
 }
