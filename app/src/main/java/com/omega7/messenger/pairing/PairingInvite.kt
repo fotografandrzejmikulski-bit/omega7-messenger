@@ -48,7 +48,7 @@ data class PairingInvite(
             inviteToken: String?,
             relayBaseUrl: String?,
             ownerSignalDeviceId: Int?,
-            ownerSignalBundle: SignalBundleString?,
+            ownerSignalBundle: String?,
             sign: (ByteArray) -> ByteArray,
         ): PairingInvite {
             require(ownerSignalDeviceId == null || ownerSignalDeviceId in 1..127) { "Nieprawidłowy Signal DeviceID właściciela." }
@@ -130,7 +130,4 @@ data class PairingInvite(
             require(!uri.host.isNullOrBlank()) { "Adres relay musi zawierać poprawny host." }
         }
     }
-
-    /** Alias used to keep the create overload unambiguous without coupling pairing to the E2EE implementation class. */
-    private typealias SignalBundleString = String?
 }
