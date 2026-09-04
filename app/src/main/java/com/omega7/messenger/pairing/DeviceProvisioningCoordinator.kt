@@ -37,6 +37,7 @@ class DeviceProvisioningCoordinator(context: Context) {
     fun createJoinMaterial(invite: PairingInvite): Result<JoinMaterial> = runCatching {
         require(invite.expiresAtMillis > System.currentTimeMillis()) { "Zaproszenie wygasło." }
         require(!invite.inviteToken.isNullOrBlank()) { "Zaproszenie nie zawiera rejestracyjnego tokenu relay." }
+        require(!invite.relayBaseUrl.isNullOrBlank()) { "Zaproszenie nie zawiera adresu relay." }
         val engine = SignalE2eeEngine.open(app)
         val keys = DeviceKeyManager()
         val request = PairingRequest.create(
@@ -87,6 +88,23 @@ class DeviceProvisioningCoordinator(context: Context) {
             ).getOrThrow()
             relayConfig.save(RelayConfigStore.Config(requireNotNull(invite.relayBaseUrl), token))
             token
+        }
+    }
+
+    /**
+     * Owner-side finalization. The joiner must have completed registration first.
+     * The bundle is fetched from the authenticated relay and the Signal session is
+     * established before the caller may mark the device as locally verified.
+     */
+    suspend fun finalizeOwnerEnrollment(groupId: String, remoteDeviceId: Int): Result<Unit> = runCatching {
+        require(groupId.isNotBlank() && groupId.length <= 128)
+        val config = requireNotNull(relayConfig.load()) { "Brak skonfigurowanego relay właściciela." }
+        val engine = SignalE2eeEngine.open(app)
+        require(remoteDeviceId in 1..127 && remoteDeviceId != engine.deviceId()) { "Nieprawidłowy zdalny DeviceID." }
+        RelayKeyClient(config.baseUrl, config.authToken, engine.deviceId()).use { client ->
+            val bundle = client.fetchBundle(groupId, remoteDeviceId).getOrThrow()
+            require(bundle.deviceId == remoteDeviceId) { "Relay zwrócił bundle innego urządzenia." }
+            engine.registerVerifiedDevice(groupId, bundle)
         }
     }
 }
